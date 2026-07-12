@@ -8,6 +8,10 @@ STT Engine is a personal AI web application that turns spoken content from video
 
 STT Engine should feel like a calm AI assistant for understanding media. The first screen is a public landing page that explains the product, and the Get Started flow opens a chatbot-style workspace where users can paste a video URL and choose what they want to do next.
 
+## Current Focus
+
+The current milestone is **frontend only**. The app should look and feel complete with mock data, prototype actions, responsive screens, and clean user flows before backend, database, authentication, or real AI processing are added.
+
 ## Core User Flow
 
 1. User opens the landing page.
@@ -89,14 +93,23 @@ The interface should use a calm, focused product style:
 - Action option cards
 - Responsive UI
 
-### Phase 2: Media Processing
+### Phase 2: Frontend Completion
+
+- Transcript preview UI
+- Summary preview UI
+- Translation options UI
+- AI question suggestions UI
+- Export options UI
+- Empty, loading, and error states
+
+### Phase 3: Media Processing
 
 - Validate video URLs
 - Support direct media uploads
 - Extract audio from media
 - Send jobs to backend processing queue
 
-### Phase 3: AI Features
+### Phase 4: AI Features
 
 - Speech-to-text transcription
 - Timestamped transcript generation
@@ -104,7 +117,7 @@ The interface should use a calm, focused product style:
 - Key points
 - Translation
 
-### Phase 4: Workspace Features
+### Phase 5: Workspace Features
 
 - AI chat with transcript context
 - Transcript search
@@ -112,7 +125,7 @@ The interface should use a calm, focused product style:
 - Export files
 - User accounts
 
-### Phase 5: Production
+### Phase 6: Production
 
 - Database persistence
 - Authentication
