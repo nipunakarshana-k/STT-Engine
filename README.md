@@ -2,311 +2,121 @@
 
 **AI-powered speech-to-text and knowledge extraction platform**
 
-STT Engine is a modern AI web application that transforms spoken content from uploaded audio and video files into structured, searchable, and actionable knowledge. It is designed as more than a simple transcription tool: the transcript becomes the foundation for translation, summarization, key point extraction, AI question answering, transcript search, and exportable documents.
+STT Engine is a personal AI web application that turns spoken content from videos, audio files, podcasts, lectures, interviews, and meetings into structured knowledge. Instead of stopping at transcription, the product helps users summarize, translate, search, chat with, and export the information inside spoken content.
 
-The platform is intended for students, researchers, educators, journalists, businesses, meeting participants, content creators, and professionals who need to understand long audio or video content quickly.
+## Product Direction
 
-## Product Vision
+STT Engine should feel like a calm AI assistant for understanding media. The first screen is a public landing page that explains the product, and the Get Started flow opens a chatbot-style workspace where users can paste a video URL and choose what they want to do next.
 
-The long-term vision for STT Engine is to become an **AI Knowledge Extraction Platform**. Instead of only converting speech into plain text, the system should help users understand, organize, translate, search, summarize, and interact with spoken information.
+## Core User Flow
 
-## Problem Statement
+1. User opens the landing page.
+2. User reads the hero, about section, features, and how-it-works section.
+3. User clicks **Get Started** in the header or hero.
+4. User lands in a chatbot-style workspace.
+5. User pastes a video URL and sends it.
+6. The assistant shows available options:
+   - Generate transcript
+   - Summarize video
+   - Translate transcript
+   - Ask questions
+   - Export results
 
-People often spend too much time watching or listening to long videos, lectures, interviews, meetings, podcasts, and recordings just to find specific information. Many existing tools focus only on transcription and do not provide a complete workflow for turning spoken content into useful knowledge.
+## Main Features
 
-STT Engine solves this by combining:
-
-- AI speech recognition
-- Automatic transcript generation
-- Translation
-- AI-powered summaries
-- Key point extraction
+- Landing page with hero, description, about, features, and how-it-works sections
+- Chatbot-style workspace for starting media analysis
+- Video URL input flow
+- AI speech-to-text transcript generation
+- Timestamped transcript display
 - Transcript search
+- AI summaries
+- Key point extraction
+- Multi-language translation
 - AI chat over transcript content
-- Export to useful document formats
-
-## Core Features
-
-### Authentication
-
-- User registration
-- Secure login
-- Password recovery
-- Profile management
-
-### Project Management
-
-- Create transcription projects
-- View all projects in a dashboard
-- Search projects
-- Delete or archive projects
-- View recent activity
-- Access previous transcripts, translations, summaries, and chat history
-
-### Media Upload
-
-- Upload audio files
-- Upload video files
-- Drag-and-drop upload
-- Upload progress indicator
-- Local storage during development
-- Cloud object storage for production
-
-Supported file types:
-
-- MP3
-- MP4
-- WAV
-- M4A
-
-Future versions may support importing media from platforms such as YouTube, Facebook, or Instagram where technically and legally permitted.
-
-### AI Speech-to-Text
-
-- Automatic speech recognition
-- Accurate transcript generation
-- Timestamped transcript output
-- Automatic language detection
-- Original transcript storage
-- Future speaker identification support
-
-### Translation
-
-Translate transcripts into multiple languages, including:
-
-- English
-- Sinhala
-- Tamil
-- French
-- German
-- Japanese
-- Chinese
-- Spanish
-
-### AI Summarization
-
-Generate different summary levels:
-
-- Short summary
-- Medium summary
-- Detailed summary
-
-### Key Point Extraction
-
-Automatically extract:
-
-- Main topics
-- Important facts
-- Names
-- Dates
-- Action items
-- Main ideas
-- Important quotes
-
-### AI Chat Assistant
-
-Users can ask natural language questions about the transcript, such as:
-
-- What is this video about?
-- Summarize the discussion.
-- Explain this section.
-- What are the key takeaways?
-- What tasks were mentioned?
-- What technologies are discussed?
-
-### Transcript Search
-
-- Search for any keyword in the transcript
-- Highlight every occurrence
-- Jump to relevant transcript sections
-
-### Export Options
-
-Download generated content as:
-
-- PDF
-- DOCX
-- TXT
-
-Future export options:
-
-- SRT subtitles
-- VTT subtitles
+- Export to PDF, DOCX, TXT, SRT, or VTT
 
 ## Technology Stack
-
-### Frontend
 
 - Next.js App Router
 - TypeScript
 - Tailwind CSS
-- shadcn/ui
+- Lucide React icons
 - Framer Motion
+- PostgreSQL and Prisma for future persistence
+- FastAPI microservice for future AI/media processing
+- Whisper-compatible speech-to-text model
+- Large language model for summaries, translation, and chat
 
-### Backend
+## Current Folder Structure
 
-- Next.js API Routes
-- Python FastAPI AI microservice
-
-### Database
-
-- PostgreSQL
-- Prisma ORM
-
-### Authentication
-
-- Auth.js / NextAuth
-
-### Storage
-
-- Local storage during development
-- Cloud object storage for uploaded media in production
-
-### AI Services
-
-- Speech recognition: Whisper-compatible speech-to-text model
-- Translation: Large language model
-- Summarization: Large language model
-- AI chat: Large language model
-
-## Main Data Models
-
-The database should include these core entities:
-
-- Users
-- Projects
-- Media Files
-- Transcripts
-- Translations
-- Summaries
-- AI Chat Messages
-- Export Records
-- Activity Logs
-
-Each project belongs to a user and may contain uploaded media, generated transcripts, translations, summaries, AI conversations, and exported documents.
-
-## System Workflow
-
-1. User signs in.
-2. User creates a new project.
-3. User uploads an audio or video file.
-4. The backend stores the uploaded media.
-5. The AI service extracts speech from the media.
-6. Speech is converted into text.
-7. The transcript is stored in PostgreSQL.
-8. Users can translate the transcript.
-9. AI generates summaries and key points.
-10. Users interact with the transcript through an AI chat interface.
-11. Results can be exported as PDF, DOCX, or TXT.
-12. Project history is saved for future access.
-
-## Pages
-
-- Landing page
-- Login
-- Register
-- Dashboard
-- Create project
-- Project details
-- Transcript
-- Summary
-- AI chat
-- History
-- Profile
-- Settings
+```txt
+app/
+  page.tsx
+  workspace/
+    page.tsx
+components/
+features/
+  landing/
+    landing-page.tsx
+  workspace/
+    chat-workspace.tsx
+lib/
+types/
+public/
+```
 
 ## UI Direction
 
-The user interface should feel like a professional AI SaaS product:
+The interface should use a calm, focused product style:
 
-- Minimal layout
-- Responsive design
-- Dark and light themes
-- Clean dashboard experience
-- Accessible navigation
-- Smooth animations
-- Modern typography using Geist or Inter
-- Color palette based on off-white surfaces and calm green accents
-- Suggested colors: off-white background, deep charcoal text, soft green primary actions, muted sage borders, and subtle green highlights
-
-The first screen after login should prioritize the actual user workflow: creating projects, uploading media, and viewing recent activity.
+- Off-white backgrounds
+- Calm green primary actions
+- Muted sage borders
+- Deep charcoal text
+- Subtle green highlights
+- Clean spacing
+- Responsive layouts
+- Professional but friendly chatbot experience
 
 ## Development Roadmap
 
-### Phase 1: Foundation
+### Phase 1: Product Shell
 
-- Project setup
-- Next.js app structure
-- Authentication
-- PostgreSQL setup
-- Prisma schema
-- Dashboard shell
+- Landing page
+- Chatbot workspace
+- Video URL input
+- Action option cards
+- Responsive UI
 
-### Phase 2: Media and Transcription
+### Phase 2: Media Processing
 
-- Project creation
-- File upload
-- Media storage
-- FastAPI AI service setup
-- Speech-to-text processing
-- Transcript display
-- Timestamp support
+- Validate video URLs
+- Support direct media uploads
+- Extract audio from media
+- Send jobs to backend processing queue
 
-### Phase 3: Knowledge Extraction
+### Phase 3: AI Features
 
+- Speech-to-text transcription
+- Timestamped transcript generation
+- Summaries
+- Key points
 - Translation
-- Short, medium, and detailed summaries
-- Key point extraction
+
+### Phase 4: Workspace Features
+
+- AI chat with transcript context
 - Transcript search
+- Project history
+- Export files
+- User accounts
 
-### Phase 4: Interaction and Export
+### Phase 5: Production
 
-- AI chat over transcripts
-- Chat history
-- Export to PDF
-- Export to DOCX
-- Export to TXT
-- Activity history
-
-### Phase 5: Polish and Delivery
-
-- UI refinement
-- Loading states
-- Error handling
-- Testing
+- Database persistence
+- Authentication
+- Cloud file storage
 - Deployment
-- Documentation
-
-## Future Enhancements
-
-- Live meeting transcription
-- Real-time translation
-- Speaker identification
-- Emotion and sentiment analysis
-- Automatic chapter generation
-- Subtitle generation
-- Quiz generation from transcripts
-- Flashcard generation
-- Meeting minutes
-- Browser extension
-- Mobile application
-- Team collaboration
-- Public API
-- Enterprise dashboard
-
-## Final-Year Project Value
-
-STT Engine is a strong final-year project because it combines full-stack software engineering with practical AI integration. It demonstrates:
-
-- AI-powered speech recognition
-- Natural language processing
-- Machine translation
-- Intelligent summarization
-- Conversational AI
-- Relational database design
-- Secure authentication
-- File processing
-- Document generation
-- Modern web application development
-
-The project has a clear real-world use case and enough depth to grow beyond a university submission into a serious portfolio product.
+- Error handling
+- Usage limits
