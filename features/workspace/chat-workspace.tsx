@@ -92,6 +92,9 @@ export function ChatWorkspace() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatInput, setChatInput] = useState("");
   
+  // Client Gemini Key State
+  const [geminiKey, setGeminiKey] = useState("");
+
   // File upload state
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -117,6 +120,18 @@ export function ChatWorkspace() {
 
   // Media Playback element ref
   const mediaRef = useRef<HTMLAudioElement | HTMLVideoElement | null>(null);
+
+  // Load Key from LocalStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setGeminiKey(localStorage.getItem("stt_gemini_key") || "");
+    }
+  }, []);
+
+  function handleSaveKey(val: string) {
+    setGeminiKey(val);
+    localStorage.setItem("stt_gemini_key", val);
+  }
 
   // Check auth and load projects
   useEffect(() => {
@@ -399,6 +414,9 @@ export function ChatWorkspace() {
     try {
       const res = await fetch(`/api/projects/${projectDetail.id}/process`, {
         method: "POST",
+        headers: {
+          "x-gemini-key": geminiKey,
+        },
       });
       if (res.ok) {
         const data = await res.json();
@@ -432,7 +450,10 @@ export function ChatWorkspace() {
     try {
       const res = await fetch(`/api/projects/${id}/translate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-gemini-key": geminiKey
+        },
         body: JSON.stringify({ language: lang }),
       });
       if (res.ok) {
@@ -468,7 +489,10 @@ export function ChatWorkspace() {
     try {
       const res = await fetch(`/api/projects/${selectedProjectId}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-gemini-key": geminiKey
+        },
         body: JSON.stringify({ message }),
       });
 
@@ -573,6 +597,23 @@ export function ChatWorkspace() {
             </button>
           </div>
         )}
+
+        {/* Gemini API Key input */}
+        <div className="px-4 py-3 border-b border-sage/40 bg-canvas/10">
+          <label className="block text-[10px] font-bold text-moss uppercase mb-1">
+            Gemini API Key (Free Tier)
+          </label>
+          <input
+            type="password"
+            placeholder="Paste your AI Studio Key..."
+            value={geminiKey}
+            onChange={(e) => handleSaveKey(e.target.value)}
+            className="w-full rounded border border-sage bg-paper px-2 py-1.5 text-[10px] text-ink outline-none placeholder-muted focus:border-fern"
+          />
+          <p className="text-[9px] text-muted mt-1 leading-normal">
+            🔑 Stored locally in your browser. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-fern underline font-bold">Google AI Studio</a>.
+          </p>
+        </div>
 
         <div className="p-3">
           <button
