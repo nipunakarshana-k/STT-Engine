@@ -1,0 +1,88 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String    // Hashed
+  name      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id              String              @id @default(uuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  mediaFileName   String?
+  sourceLanguage  String?
+  durationSeconds Float?
+  status          String              @default("uploading") // uploading, processing, ready, failed
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  segments        TranscriptSegment[]
+  summary         Summary?
+  translations    Translation[]
+  keyPoints       KeyPoint[]
+  chatMessages    ChatMessage[]
+}
+
+model TranscriptSegment {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  time      String   // formatted as HH:MM:SS
+  text      String
+  startMs   Int?
+  endMs     Int?
+  speaker   String?
+  createdAt DateTime @default(now())
+}
+
+model Summary {
+  id        String   @id @default(uuid())
+  projectId String   @unique
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  short     String
+  medium    String
+  detailed  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Translation {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  language  String   // e.g. English, Sinhala, Tamil, French, Spanish, German, Japanese, Chinese
+  text      String   // Full translated text
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, language])
+}
+
+model KeyPoint {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category  String   // topics, facts, names, dates, actions, quotes
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role      String   // user, assistant
+  text      String
+  createdAt DateTime @default(now())
+}
