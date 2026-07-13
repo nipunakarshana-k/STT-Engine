@@ -3,7 +3,8 @@ import json
 import uuid
 import shutil
 import tempfile
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import time
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -20,13 +21,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Gemini API if key is present
+# Initialize Gemini API if key is present in environment
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    print("Gemini API configured successfully.")
+    print("Gemini API configured successfully from env.")
 else:
-    print("WARNING: GEMINI_API_KEY environment variable not set. Running in mock/fallback mode.")
+    print("WARNING: GEMINI_API_KEY environment variable not set. Running in mock/fallback mode unless client key provided.")
 
 # Helper to clean JSON string returned from LLM
 def clean_llm_json(text: str) -> str:
@@ -38,12 +39,18 @@ def clean_llm_json(text: str) -> str:
     return text.strip()
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), language: Optional[str] = Form("English")):
+async def transcribe(
+    file: UploadFile = File(...), 
+    language: Optional[str] = Form("English"),
+    x_gemini_key: Optional[str] = Header(None)
+):
     # Save uploaded file to a temporary location
     temp_dir = tempfile.gettempdir()
     file_id = str(uuid.uuid4())
     ext = os.path.splitext(file.filename)[1] or ".mp3"
     temp_path = os.path.join(temp_dir, f"{file_id}{ext}")
+    
+    active_key = x_gemini_key or GEMINI_API_KEY
     
     try:
         with open(temp_path, "wb") as buffer:
@@ -52,24 +59,40 @@ async def transcribe(file: UploadFile = File(...), language: Optional[str] = For
         duration = 60.0 # Default fallback duration estimation
         
         # If API key is present, upload file to Gemini and request transcription
-        if GEMINI_API_KEY:
+        if active_key:
             try:
+                genai.configure(api_key=active_key)
+                
                 # Upload file to Gemini Files API (supports audio/video formats)
                 print(f"Uploading {temp_path} to Gemini...")
                 g_file = genai.upload_file(path=temp_path)
-                print(f"File uploaded. Name: {g_file.name}")
+                print(f"File uploaded. Name: {g_file.name}. Polling status...")
+                
+                # Wait for video/audio file processing to complete
+                retries = 0
+                while g_file.state.name == "PROCESSING" and retries < 30:
+                    time.sleep(2)
+                    g_file = genai.get_file(g_file.name)
+                    retries += 1
+                    print(f"File status: {g_file.state.name}")
+                
+                if g_file.state.name != "ACTIVE":
+                    raise Exception(f"File processing failed on Gemini. State: {g_file.state.name}")
                 
                 model = genai.GenerativeModel("gemini-1.5-flash")
                 prompt = (
-                    "Please transcribe this audio file word-for-word. Output ONLY a valid JSON list of objects, "
-                    "where each object has exactly these keys:\n"
+                    "Please analyze this video/audio file. If it contains audio speech, transcribe it word-for-word. "
+                    "If the video is silent or has no audio (e.g. screen recording or silent animation), analyze the video frames scene-by-scene: "
+                    "describe what is happening in detail, and use OCR to read all text, labels, and names shown on the screen. "
+                    "Output the result ONLY as a valid JSON list of objects, where each object has exactly these keys:\n"
                     "- 'time': string formatted as HH:MM:SS representing the starting timestamp of the segment\n"
-                    "- 'text': string representing the transcript of that segment\n"
+                    "- 'text': string representing the spoken transcript or the visual description of that segment\n"
                     "- 'startMs': integer representing the start milliseconds\n\n"
+                    "Keep segments short (around 5-15 seconds each). "
                     "Do not wrap the response in markdown blocks or include any extra text. Just output raw JSON."
                 )
                 
-                print("Requesting transcription from Gemini...")
+                print("Requesting transcription/description from Gemini...")
                 response = model.generate_content([g_file, prompt])
                 
                 # Delete file from Gemini storage
@@ -124,18 +147,20 @@ class SummarizeRequest(BaseModel):
     text: str
 
 @app.post("/summarize")
-async def summarize(req: SummarizeRequest):
-    if GEMINI_API_KEY:
+async def summarize(req: SummarizeRequest, x_gemini_key: Optional[str] = Header(None)):
+    active_key = x_gemini_key or GEMINI_API_KEY
+    if active_key:
         try:
+            genai.configure(api_key=active_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             prompt = (
-                "Based on the following transcript text, generate three levels of summaries in JSON format. "
+                "Based on the following transcript text or scene description, generate three levels of summaries in JSON format. "
                 "The JSON must have three keys: 'short', 'medium', and 'detailed'.\n"
                 "- 'short': a 1-2 sentence quick summary.\n"
                 "- 'medium': a 1-2 paragraph summary.\n"
                 "- 'detailed': a thorough bulleted summary of all main sections.\n\n"
                 "Do not include markdown or wrappers. Output raw JSON only.\n\n"
-                f"Transcript:\n{req.text}"
+                f"Content:\n{req.text}"
             )
             response = model.generate_content(prompt)
             cleaned = clean_llm_json(response.text)
@@ -154,21 +179,23 @@ class KeypointsRequest(BaseModel):
     text: str
 
 @app.post("/extract-keypoints")
-async def extract_keypoints(req: KeypointsRequest):
-    if GEMINI_API_KEY:
+async def extract_keypoints(req: KeypointsRequest, x_gemini_key: Optional[str] = Header(None)):
+    active_key = x_gemini_key or GEMINI_API_KEY
+    if active_key:
         try:
+            genai.configure(api_key=active_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             prompt = (
-                "Analyze the following transcript text and extract key information in JSON format. "
+                "Analyze the following transcript text or video description and extract key information in JSON format. "
                 "The JSON must have six list keys: 'topics', 'facts', 'names', 'dates', 'actions', 'quotes'.\n"
                 "- 'topics': Important high level themes/subjects.\n"
                 "- 'facts': Core facts or claims made.\n"
-                "- 'names': Names of organizations, technologies, or people.\n"
+                "- 'names': Names of organizations, technologies, people or screens shown.\n"
                 "- 'dates': Specific timeframes, deadlines, or dates mentioned.\n"
                 "- 'actions': Takeaways, next steps, or todo items.\n"
-                "- 'quotes': Direct, notable quotes.\n\n"
+                "- 'quotes': Direct, notable quotes or visible texts.\n\n"
                 "Do not include markdown. Output raw JSON only.\n\n"
-                f"Transcript:\n{req.text}"
+                f"Content:\n{req.text}"
             )
             response = model.generate_content(prompt)
             cleaned = clean_llm_json(response.text)
@@ -191,13 +218,15 @@ class TranslateRequest(BaseModel):
     target_language: str
 
 @app.post("/translate")
-async def translate(req: TranslateRequest):
-    if GEMINI_API_KEY:
+async def translate(req: TranslateRequest, x_gemini_key: Optional[str] = Header(None)):
+    active_key = x_gemini_key or GEMINI_API_KEY
+    if active_key:
         try:
+            genai.configure(api_key=active_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             prompt = (
-                f"Translate the following transcript text into {req.target_language}. "
-                "Maintain the flow and tone of the original spoken content. "
+                f"Translate the following transcript or description text into {req.target_language}. "
+                "Maintain the flow and tone of the original spoken or written content. "
                 "Output only the translated text.\n\n"
                 f"Text:\n{req.text}"
             )
@@ -209,7 +238,7 @@ async def translate(req: TranslateRequest):
     # Mock fallback
     translations = {
         "Sinhala": "මෙය STT එන්ජිම පිළිබඳ හැඳින්වීමක් වන අතර කථනය ව්‍යුහගත දැනුමක් බවට පරිවර්තනය කිරීමේ හැකියාව ඇත.",
-        "Tamil": "இது எஸ்டிடி இன்ஜின் பற்றிய அறிமுகமாகும், மேலும் பேச்சை கட்டமைக்கப்பட்ட அறிவாக மாற்றும் திறனைக் கொண்டுள்ளது.",
+        "Tamil": "இது எஸ்டිடி இன்ஜின் பற்றிய அறிமுகமாகும், மேலும் பேச்சை கட்டமைக்கப்பட்ட அறிவாக மாற்றும் திறනைக் கொண்டுள்ளது.",
         "French": "Ceci est une introduction à STT Engine et à sa capacité à convertir la parole en connaissances structurées.",
         "Spanish": "Esta es una introducción a STT Engine y su capacidad para convertir el habla en conocimiento estructurado.",
         "German": "Dies ist eine Einführung in die STT Engine und ihre Fähigkeit, Sprache in strukturiertes Wissen umzuwandeln.",
@@ -229,9 +258,11 @@ class ChatRequest(BaseModel):
     new_message: str
 
 @app.post("/chat")
-async def chat(req: ChatRequest):
-    if GEMINI_API_KEY:
+async def chat(req: ChatRequest, x_gemini_key: Optional[str] = Header(None)):
+    active_key = x_gemini_key or GEMINI_API_KEY
+    if active_key:
         try:
+            genai.configure(api_key=active_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             
             history_prompt = ""
@@ -240,9 +271,9 @@ async def chat(req: ChatRequest):
                 
             prompt = (
                 "You are the STT Engine AI Chat Assistant. You help users understand the uploaded audio/video. "
-                "Answer the user's questions using ONLY the transcript provided below. "
-                "If the answer cannot be found in the transcript, explain that clearly.\n\n"
-                f"Transcript:\n{req.transcript}\n\n"
+                "Answer the user's questions using ONLY the transcript/video description provided below. "
+                "If the answer cannot be found in the content, explain that clearly.\n\n"
+                f"Content Context:\n{req.transcript}\n\n"
                 f"Conversation History:\n{history_prompt}"
                 f"User: {req.new_message}\n"
                 "Assistant:"
