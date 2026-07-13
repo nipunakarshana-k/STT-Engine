@@ -50,6 +50,7 @@ export async function POST(
       return NextResponse.json(existingTranslation);
     }
 
+    const fullTranscript = project.segments.map((s) => s.text).join(" ");
     const xGeminiKey = request.headers.get("x-gemini-key") || "";
     let translatedText = "";
 
