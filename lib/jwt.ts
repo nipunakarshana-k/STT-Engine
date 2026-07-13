@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import { cookies } from "next-headers"; // Wait, in Next.js 15, cookies can be imported from "next/headers"
 
 const JWT_SECRET = process.env.JWT_SECRET || "stt-engine-default-secret-key-change-in-production";
 
