@@ -57,13 +57,17 @@ export async function POST(
       content: m.text,
     }));
 
+    const xGeminiKey = request.headers.get("x-gemini-key") || "";
     let aiResponse = "";
 
     try {
       // Contact FastAPI chat service
       const response = await fetch(`${FASTAPI_URL}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
+        },
         body: JSON.stringify({
           transcript: fullTranscript,
           chat_history: chatHistory,

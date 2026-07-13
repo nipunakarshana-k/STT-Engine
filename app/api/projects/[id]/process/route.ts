@@ -35,6 +35,8 @@ export async function POST(
       return NextResponse.json({ error: "No media file associated with this project" }, { status: 400 });
     }
 
+    const xGeminiKey = request.headers.get("x-gemini-key") || "";
+
     const filePath = path.join(process.cwd(), "public", "uploads", project.mediaFileName);
 
     // Update status to processing
@@ -56,6 +58,7 @@ export async function POST(
       console.log(`Sending file to FastAPI at ${FASTAPI_URL}/transcribe...`);
       const transResponse = await fetch(`${FASTAPI_URL}/transcribe`, {
         method: "POST",
+        headers: xGeminiKey ? { "x-gemini-key": xGeminiKey } : {},
         body: sendForm,
       });
 
@@ -101,7 +104,10 @@ export async function POST(
       // Summarize
       const sumResponse = await fetch(`${FASTAPI_URL}/summarize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
+        },
         body: JSON.stringify({ text: fullText }),
       });
       if (sumResponse.ok) {
@@ -111,7 +117,10 @@ export async function POST(
       // Extract Key Points
       const kpResponse = await fetch(`${FASTAPI_URL}/extract-keypoints`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
+        },
         body: JSON.stringify({ text: fullText }),
       });
       if (kpResponse.ok) {
