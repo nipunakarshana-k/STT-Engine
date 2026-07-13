@@ -50,14 +50,17 @@ export async function POST(
       return NextResponse.json(existingTranslation);
     }
 
-    const fullTranscript = project.segments.map((s) => s.text).join(" ");
+    const xGeminiKey = request.headers.get("x-gemini-key") || "";
     let translatedText = "";
 
     try {
       // Call FastAPI translation service
       const response = await fetch(`${FASTAPI_URL}/translate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
+        },
         body: JSON.stringify({
           text: fullTranscript,
           target_language: language,
