@@ -195,9 +195,19 @@ export async function POST(
     const finalProject = await prisma.project.findUnique({
       where: { id },
       include: {
-        segments: true,
+        segments: {
+          orderBy: {
+            time: "asc",
+          },
+        },
         summary: true,
         keyPoints: true,
+        translations: true,
+        chatMessages: {
+          orderBy: {
+            createdAt: "asc",
+          },
+        },
       },
     });
 

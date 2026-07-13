@@ -729,10 +729,10 @@ export function ChatWorkspace() {
                       </div>
 
                       <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                        {projectDetail.segments.filter(s => s.text.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
+                        {(projectDetail.segments || []).filter(s => s.text.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
                           <p className="text-xs text-muted text-center py-6">No matching transcript lines found.</p>
                         ) : (
-                          projectDetail.segments
+                          (projectDetail.segments || [])
                             .filter(s => s.text.toLowerCase().includes(searchQuery.toLowerCase()))
                             .map((seg) => (
                               <div key={seg.id} className="flex gap-4 rounded-lg border border-sage/40 bg-canvas/10 p-3 hover:bg-canvas/30 transition">
@@ -788,7 +788,7 @@ export function ChatWorkspace() {
                         { title: "Actions & Tasks", key: "actions", color: "border-green-200 bg-green-50/50" },
                         { title: "Important Quotes", key: "quotes", color: "border-yellow-200 bg-yellow-50/50" },
                       ].map((section) => {
-                        const items = projectDetail.keyPoints.filter(kp => kp.category === section.key);
+                        const items = (projectDetail.keyPoints || []).filter(kp => kp.category === section.key);
                         return (
                           <div key={section.key} className={`rounded-xl border p-4 shadow-sm flex flex-col ${section.color}`}>
                             <h4 className="text-xs font-bold text-ink mb-2.5 border-b border-black/5 pb-1">{section.title}</h4>
@@ -874,7 +874,7 @@ export function ChatWorkspace() {
                           </div>
                         </div>
 
-                        {projectDetail.chatMessages.map((msg) => (
+                        {(projectDetail.chatMessages || []).map((msg) => (
                           <div
                             key={msg.id}
                             className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}
