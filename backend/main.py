@@ -21,6 +21,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Manually load .env from parent directory if present
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+if os.path.exists(env_path):
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip()] = v.strip()
+        print("Loaded environment from root .env file.")
+    except Exception as e:
+        print(f"Failed to load .env file: {e}")
+
 # Initialize Gemini API if key is present in environment
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 if GEMINI_API_KEY:
@@ -142,6 +156,118 @@ async def transcribe(
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+class TranscribeUrlRequest(BaseModel):
+    url: str
+    language: Optional[str] = "English"
+
+@app.post("/transcribe-url")
+async def transcribe_url(
+    req: TranscribeUrlRequest,
+    x_gemini_key: Optional[str] = Header(None)
+):
+    # Create temporary directory for download
+    temp_dir = tempfile.gettempdir()
+    file_id = str(uuid.uuid4())
+    temp_path = None
+    
+    active_key = x_gemini_key or GEMINI_API_KEY
+    if not active_key:
+        raise HTTPException(status_code=400, detail="Gemini API Key is required to process URLs.")
+        
+    try:
+        is_youtube = "youtube.com" in req.url or "youtu.be" in req.url
+        
+        if is_youtube:
+            print(f"Downloading YouTube video from {req.url} using yt-dlp...")
+            import yt_dlp
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(temp_dir, f"{file_id}.%(ext)s"),
+                'quiet': True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(req.url, download=True)
+                temp_path = ydl.prepare_filename(info)
+            print(f"YouTube audio downloaded to {temp_path}")
+        else:
+            # Direct media file URL (MP3, MP4, WAV, M4A)
+            print(f"Downloading direct media from {req.url}...")
+            import requests
+            ext = ".mp3"
+            if ".mp4" in req.url.lower():
+                ext = ".mp4"
+            elif ".wav" in req.url.lower():
+                ext = ".wav"
+            elif ".m4a" in req.url.lower():
+                ext = ".m4a"
+                
+            temp_path = os.path.join(temp_dir, f"{file_id}{ext}")
+            response = requests.get(req.url, stream=True, timeout=60)
+            response.raise_for_status()
+            with open(temp_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Direct media downloaded to {temp_path}")
+
+        # Configure API key
+        genai.configure(api_key=active_key)
+        
+        # Upload downloaded file to Gemini Files API
+        print(f"Uploading downloaded file {temp_path} to Gemini...")
+        g_file = genai.upload_file(path=temp_path)
+        print(f"File uploaded. Name: {g_file.name}. Polling status...")
+        
+        # Wait for file to become active
+        retries = 0
+        while g_file.state.name == "PROCESSING" and retries < 40:
+            time.sleep(2)
+            g_file = genai.get_file(g_file.name)
+            retries += 1
+            print(f"Gemini file state: {g_file.state.name}")
+            
+        if g_file.state.name != "ACTIVE":
+            raise Exception(f"File processing failed on Gemini. State: {g_file.state.name}")
+
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        prompt = (
+            "Please analyze this video/audio file. If it contains audio speech, transcribe it word-for-word. "
+            "If the video is silent or has no audio (e.g. screen recording or silent animation), analyze the video frames scene-by-scene: "
+            "describe what is happening in detail, and use OCR to read all text, labels, and names shown on the screen. "
+            "Output the result ONLY as a valid JSON list of objects, where each object has exactly these keys:\n"
+            "- 'time': string formatted as HH:MM:SS representing the starting timestamp of the segment\n"
+            "- 'text': string representing the spoken transcript or the visual description of that segment\n"
+            "- 'startMs': integer representing the start milliseconds\n\n"
+            "Keep segments short (around 5-15 seconds each). "
+            "Do not wrap the response in markdown blocks or include any extra text. Just output raw JSON."
+        )
+        
+        print("Requesting transcription/description from Gemini...")
+        response = model.generate_content([g_file, prompt])
+        
+        # Delete file from Gemini storage
+        try:
+            genai.delete_file(g_file.name)
+        except Exception as e:
+            print(f"Failed to delete Gemini file: {e}")
+            
+        cleaned_response = clean_llm_json(response.text)
+        segments = json.loads(cleaned_response)
+        
+        return {
+            "status": "ready",
+            "durationSeconds": 60.0,
+            "segments": segments
+        }
+    except Exception as e:
+        print(f"URL processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                print(f"Failed to remove temp file: {e}")
 
 class SummarizeRequest(BaseModel):
     text: str

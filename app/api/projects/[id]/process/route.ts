@@ -36,8 +36,7 @@ export async function POST(
     }
 
     const xGeminiKey = request.headers.get("x-gemini-key") || "";
-
-    const filePath = path.join(process.cwd(), "public", "uploads", project.mediaFileName);
+    const isUrl = project.mediaFileName && (project.mediaFileName.startsWith("http://") || project.mediaFileName.startsWith("https://"));
 
     // Update status to processing
     await prisma.project.update({
@@ -48,25 +47,48 @@ export async function POST(
     let transcriptionResult;
 
     try {
-      // 1. Send file to FastAPI for transcription
-      const fileBuffer = await fs.readFile(filePath);
-      const fileBlob = new Blob([fileBuffer]);
-      const sendForm = new FormData();
-      sendForm.append("file", fileBlob, project.mediaFileName);
-      sendForm.append("language", project.sourceLanguage || "English");
+      if (isUrl) {
+        console.log(`Sending URL to FastAPI at ${FASTAPI_URL}/transcribe-url...`);
+        const transResponse = await fetch(`${FASTAPI_URL}/transcribe-url`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
+          },
+          body: JSON.stringify({
+            url: project.mediaFileName,
+            language: project.sourceLanguage || "English"
+          }),
+        });
 
-      console.log(`Sending file to FastAPI at ${FASTAPI_URL}/transcribe...`);
-      const transResponse = await fetch(`${FASTAPI_URL}/transcribe`, {
-        method: "POST",
-        headers: xGeminiKey ? { "x-gemini-key": xGeminiKey } : {},
-        body: sendForm,
-      });
+        if (!transResponse.ok) {
+          throw new Error(`FastAPI URL transcription failed with status: ${transResponse.status}`);
+        }
 
-      if (!transResponse.ok) {
-        throw new Error(`FastAPI transcription failed with status: ${transResponse.status}`);
+        transcriptionResult = await transResponse.json();
+      } else {
+        const filePath = path.join(process.cwd(), "public", "uploads", project.mediaFileName!);
+        
+        // 1. Send file to FastAPI for transcription
+        const fileBuffer = await fs.readFile(filePath);
+        const fileBlob = new Blob([fileBuffer]);
+        const sendForm = new FormData();
+        sendForm.append("file", fileBlob, project.mediaFileName!);
+        sendForm.append("language", project.sourceLanguage || "English");
+
+        console.log(`Sending file to FastAPI at ${FASTAPI_URL}/transcribe...`);
+        const transResponse = await fetch(`${FASTAPI_URL}/transcribe`, {
+          method: "POST",
+          headers: xGeminiKey ? { "x-gemini-key": xGeminiKey } : {},
+          body: sendForm,
+        });
+
+        if (!transResponse.ok) {
+          throw new Error(`FastAPI transcription failed with status: ${transResponse.status}`);
+        }
+
+        transcriptionResult = await transResponse.json();
       }
-
-      transcriptionResult = await transResponse.json();
     } catch (apiError) {
       console.warn("Failed to communicate with FastAPI. Using Next.js local fallback:", apiError);
       
