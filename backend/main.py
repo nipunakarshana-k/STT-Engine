@@ -9,6 +9,120 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import google.generativeai as genai
+import re
+from collections import Counter
+
+def get_youtube_transcript(url: str):
+    import yt_dlp
+    temp_dir = tempfile.gettempdir()
+    file_id = str(uuid.uuid4())
+    ydl_opts = {
+        'writeautomaticsub': True,
+        'writesubtitles': True,
+        'skip_download': True,
+        'outtmpl': os.path.join(temp_dir, f"{file_id}.%(ext)s"),
+        'subtitleslangs': ['en'],
+        'quiet': True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+        sub_file = None
+        for ext in ['.en.vtt', '.en.srt']:
+            path = os.path.join(temp_dir, f"{file_id}{ext}")
+            if os.path.exists(path):
+                sub_file = path
+                break
+        if not sub_file:
+            return None
+        with open(sub_file, "r", encoding="utf-8") as f:
+            vtt_content = f.read()
+        try:
+            os.remove(sub_file)
+        except Exception:
+            pass
+        segments = []
+        lines = vtt_content.splitlines()
+        current_time = None
+        current_ms = None
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if '-->' in line:
+                parts = line.split('-->')
+                start_ts = parts[0].strip().split()[0]
+                ts_parts = start_ts.split('.')
+                time_part = ts_parts[0]
+                ms_part = int(ts_parts[1][:3]) if len(ts_parts) > 1 else 0
+                if time_part.count(':') == 1:
+                    time_part = "00:" + time_part
+                current_time = time_part
+                h, m, s = map(int, time_part.split(':'))
+                current_ms = ((h * 3600) + (m * 60) + s) * 1000 + ms_part
+            elif line.startswith('WEBVTT') or line.startswith('Kind:') or line.startswith('Language:') or line.startswith('Style:'):
+                continue
+            elif line.isdigit():
+                continue
+            else:
+                cleaned_text = re.sub(r'<[^>]*>', '', line).strip()
+                cleaned_text = cleaned_text.replace("&gt;", "").replace("&lt;", "").replace("&amp;", "&").strip()
+                if cleaned_text and current_time:
+                    if segments and segments[-1]['text'] == cleaned_text:
+                        continue
+                    if segments and (cleaned_text in segments[-1]['text'] or segments[-1]['text'] in cleaned_text):
+                        if len(cleaned_text) > len(segments[-1]['text']):
+                            segments[-1]['text'] = cleaned_text
+                        continue
+                    segments.append({
+                        "time": current_time,
+                        "text": cleaned_text,
+                        "startMs": current_ms
+                    })
+        return segments
+    except Exception as e:
+        print(f"Error fetching YouTube transcript: {e}")
+        return None
+
+def generate_heuristic_summary(text: str):
+    sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+    if not sentences:
+        return {
+            "short": "No content available to summarize.",
+            "medium": "No content available to summarize.",
+            "detailed": "• No content available."
+        }
+    short = sentences[0] + "."
+    if len(sentences) > 1:
+        short += " " + sentences[1] + "."
+    medium = " ".join(sentences[:min(len(sentences), 4)]) + "."
+    detailed_bullets = []
+    for i in range(0, len(sentences), 3):
+        chunk = sentences[i:i+3]
+        if chunk:
+            detailed_bullets.append(f"• " + " ".join(chunk) + ".")
+    detailed = "\n".join(detailed_bullets[:5])
+    return {
+        "short": short,
+        "medium": medium,
+        "detailed": detailed
+    }
+
+def generate_heuristic_keypoints(text: str):
+    words = re.findall(r'\b\w+\b', text.lower())
+    stopwords = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "my", "our", "your", "his", "her", "its", "their", "here", "there", "what", "how", "why", "who", "when", "where"}
+    filtered_words = [w for w in words if w not in stopwords and len(w) > 3]
+    counts = Counter(filtered_words)
+    top_words = [item[0] for item in counts.most_common(5)]
+    sentences = [s.strip() for s in re.split(r'[.!?]', text) if s.strip()]
+    return {
+        "topics": [w.capitalize() for w in top_words],
+        "facts": [s + "." for s in sentences[:min(len(sentences), 3)]] if sentences else [],
+        "names": ["Video Content"],
+        "dates": ["Current Session"],
+        "actions": [s + "." for s in sentences[-min(len(sentences), 2):]] if sentences else [],
+        "quotes": [s for s in sentences if len(s) > 10][:2]
+    }
 
 app = FastAPI(title="STT Engine AI Service")
 
@@ -172,14 +286,23 @@ async def transcribe_url(
     temp_path = None
     
     active_key = x_gemini_key or GEMINI_API_KEY
-    if not active_key:
-        raise HTTPException(status_code=400, detail="Gemini API Key is required to process URLs.")
-        
+    
     try:
         is_youtube = "youtube.com" in req.url or "youtu.be" in req.url
         
         if is_youtube:
-            print(f"Downloading YouTube video from {req.url} using yt-dlp...")
+            # Try automatic subtitle extraction first
+            youtube_segments = get_youtube_transcript(req.url)
+            if youtube_segments:
+                print(f"Successfully retrieved YouTube subtitles with {len(youtube_segments)} segments.")
+                duration = max(60.0, youtube_segments[-1]["startMs"] / 1000.0 + 5.0) if youtube_segments else 60.0
+                return {
+                    "status": "ready",
+                    "durationSeconds": duration,
+                    "segments": youtube_segments
+                }
+            
+            print(f"Subtitles not found. Downloading YouTube video from {req.url} using yt-dlp...")
             import yt_dlp
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -324,11 +447,7 @@ async def summarize(req: SummarizeRequest, x_gemini_key: Optional[str] = Header(
             print(f"Gemini summarization failed: {e}")
             
     # Mock fallback
-    return {
-        "short": "This content introduces the STT Engine and its capability to convert speech into structured knowledge.",
-        "medium": "The STT Engine is an AI-powered speech-to-text platform that allows users to upload audio and video, transcribe it, translate it into several languages, chat with the transcript content, and export the resulting data to PDF, Word, and text formats.",
-        "detailed": "• Introduction to STT Engine: Highlights the mission of transforming speech to actionable knowledge.\n• Key Capabilities: Discusses speech recognition, translation (including Sinhala, Tamil, French), and smart exports.\n• Future Roadmap: Outlines enhancements such as live meeting transcription, quiz generation, and enterprise features."
-    }
+    return generate_heuristic_summary(req.text)
 
 class KeypointsRequest(BaseModel):
     text: str
@@ -359,14 +478,7 @@ async def extract_keypoints(req: KeypointsRequest, x_gemini_key: Optional[str] =
             print(f"Gemini keypoints extraction failed: {e}")
             
     # Mock fallback
-    return {
-        "topics": ["AI Transcription", "Knowledge Extraction", "File Exporting"],
-        "facts": ["STT Engine supports PDF, DOCX, TXT, SRT, and VTT exports.", "Audio files can be transcribed in multiple languages."],
-        "names": ["STT Engine", "Gemini AI", "Whisper model"],
-        "dates": ["July 2026", "Future releases"],
-        "actions": ["Upload your first media file", "Review the generated transcript", "Translate or summarize for export"],
-        "quotes": ["Transcription alone is not the final value. The transcript allows search, summary, and chat."]
-    }
+    return generate_heuristic_keypoints(req.text)
 
 class TranslateRequest(BaseModel):
     text: str
@@ -438,5 +550,25 @@ async def chat(req: ChatRequest, x_gemini_key: Optional[str] = Header(None)):
         except Exception as e:
             print(f"Gemini chat failed: {e}")
             
-    # Mock fallback
-    return {"response": f"Based on the transcript, you asked: '{req.new_message}'. This is a mock response from the AI assistant because the Gemini API key is not configured. Once connected, I will search the transcript for you!"}
+    # Heuristic fallback
+    msg = req.new_message.lower()
+    if "summar" in msg:
+        summary_heur = generate_heuristic_summary(req.transcript)
+        return {"response": f"[AI Assistant]: Here is a quick summary of the video content:\n\n{summary_heur['medium']}"}
+    elif "key" in msg or "point" in msg or "topic" in msg:
+        kp_heur = generate_heuristic_keypoints(req.transcript)
+        bullets = "\n".join([f"• {topic}" for topic in kp_heur["topics"]])
+        return {"response": f"[AI Assistant]: Here are some key topics mentioned in the video:\n\n{bullets}"}
+    else:
+        # Try to find matching sentences in the transcript
+        matching_sentences = []
+        sentences = [s.strip() for s in re.split(r'[.!?]', req.transcript) if s.strip()]
+        for sentence in sentences:
+            query_words = [w for w in msg.split() if len(w) > 3]
+            if any(qw in sentence.lower() for qw in query_words):
+                matching_sentences.append(sentence)
+        if matching_sentences:
+            ref_text = ". ".join(matching_sentences[:3]) + "."
+            return {"response": f"[AI Assistant]: Based on the video transcript, here is what I found:\n\n\"{ref_text}\""}
+        
+    return {"response": f"Based on the transcript, you asked: '{req.new_message}'. (Note: Gemini API key is not configured, but I can still assist you with general queries!)"}
