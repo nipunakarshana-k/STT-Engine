@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { title, language } = body;
+    const { title, language, mediaFileName } = body;
 
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -41,6 +41,7 @@ export async function POST(request: Request) {
         title,
         sourceLanguage: language || "English",
         status: "uploading",
+        mediaFileName: mediaFileName || null,
       },
     });
 

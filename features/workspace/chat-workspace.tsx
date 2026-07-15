@@ -157,17 +157,21 @@ export function ChatWorkspace() {
     let intervalId: any;
     if (projectDetail && (projectDetail.status === "processing" || projectDetail.status === "uploading") && processingOption !== "") {
       intervalId = setInterval(async () => {
-        const res = await fetch(`/api/projects/${projectDetail.id}`);
-        if (res.ok) {
-          const updated = await res.json();
-          setProjectDetail(updated);
-          if (updated.status === "ready") {
-            setProcessingState("success");
-            loadProjects();
-          } else if (updated.status === "failed") {
-            setProcessingState("failed");
-            loadProjects();
+        try {
+          const res = await fetch(`/api/projects/${projectDetail.id}`);
+          if (res.ok) {
+            const updated = await res.json();
+            setProjectDetail(updated);
+            if (updated.status === "ready") {
+              setProcessingState("success");
+              loadProjects();
+            } else if (updated.status === "failed") {
+              setProcessingState("failed");
+              loadProjects();
+            }
           }
+        } catch (err) {
+          console.error("Error polling project status:", err);
         }
       }, 3000);
     }
@@ -214,12 +218,12 @@ export function ChatWorkspace() {
     }
   }
 
-  async function createProjectAndGetId(title: string, sourceLang: string): Promise<string | null> {
+  async function createProjectAndGetId(title: string, sourceLang: string, mediaFileName?: string): Promise<string | null> {
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, language: sourceLang }),
+        body: JSON.stringify({ title, language: sourceLang, mediaFileName }),
       });
 
       if (res.ok) {
@@ -279,7 +283,7 @@ export function ChatWorkspace() {
       const isUrl = inputVal.startsWith("http://") || inputVal.startsWith("https://");
       const title = isUrl ? `Video URL: ${inputVal.slice(0, 30)}...` : `Text Chat: ${inputVal.slice(0, 20)}...`;
       
-      const newId = await createProjectAndGetId(title, "English");
+      const newId = await createProjectAndGetId(title, "English", isUrl ? inputVal : undefined);
       if (newId) {
         // Create optimistic project detail
         const initialDetail: FullProjectDetail = {
