@@ -23,6 +23,12 @@ def get_youtube_transcript(url: str):
         'outtmpl': os.path.join(temp_dir, f"{file_id}.%(ext)s"),
         'subtitleslangs': ['en'],
         'quiet': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Sec-Fetch-Mode': 'navigate',
+        }
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -302,39 +308,45 @@ async def transcribe_url(
                     "segments": youtube_segments
                 }
             
-            print(f"Subtitles not found. Downloading YouTube video from {req.url} using yt-dlp...")
-            import yt_dlp
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(temp_dir, f"{file_id}.%(ext)s"),
-                'quiet': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(req.url, download=True)
-                temp_path = ydl.prepare_filename(info)
-            print(f"YouTube audio downloaded to {temp_path}")
-        else:
-            # Direct media file URL (MP3, MP4, WAV, M4A)
-            print(f"Downloading direct media from {req.url}...")
-            import requests
-            ext = ".mp3"
-            if ".mp4" in req.url.lower():
-                ext = ".mp4"
-            elif ".wav" in req.url.lower():
-                ext = ".wav"
-            elif ".m4a" in req.url.lower():
-                ext = ".m4a"
-                
-            temp_path = os.path.join(temp_dir, f"{file_id}{ext}")
-            response = requests.get(req.url, stream=True, timeout=60)
-            response.raise_for_status()
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            print(f"Direct media downloaded to {temp_path}")
+            print(f"Subtitles not found. Proceeding with audio download...")
+            
+        try:
+            if is_youtube:
+                print(f"Downloading YouTube video from {req.url} using yt-dlp...")
+                import yt_dlp
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': os.path.join(temp_dir, f"{file_id}.%(ext)s"),
+                    'quiet': True,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    }
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(req.url, download=True)
+                    temp_path = ydl.prepare_filename(info)
+                print(f"YouTube audio downloaded to {temp_path}")
+            else:
+                # Direct media file URL (MP3, MP4, WAV, M4A)
+                print(f"Downloading direct media from {req.url}...")
+                import requests
+                ext = ".mp3"
+                if ".mp4" in req.url.lower():
+                    ext = ".mp4"
+                elif ".wav" in req.url.lower():
+                    ext = ".wav"
+                elif ".m4a" in req.url.lower():
+                    ext = ".m4a"
+                    
+                temp_path = os.path.join(temp_dir, f"{file_id}{ext}")
+                response = requests.get(req.url, stream=True, timeout=60)
+                response.raise_for_status()
+                with open(temp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"Direct media downloaded to {temp_path}")
 
-        if active_key:
-            try:
+            if active_key:
                 # Configure API key
                 genai.configure(api_key=active_key)
                 
@@ -384,8 +396,8 @@ async def transcribe_url(
                     "durationSeconds": 60.0,
                     "segments": segments
                 }
-            except Exception as e:
-                print(f"Gemini URL transcription failed, falling back to mock: {e}")
+        except Exception as e:
+            print(f"Media download/transcription failed, falling back to mock: {e}")
 
         # Mock fallback
         print("Using mock transcription fallback for URL...")

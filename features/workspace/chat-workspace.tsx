@@ -825,14 +825,14 @@ export function ChatWorkspace() {
                             <video
                               ref={mediaRef as any}
                               controls
-                              src={`/uploads/${projectDetail.mediaFileName}`}
+                              src={projectDetail.mediaFileName.startsWith("http") ? projectDetail.mediaFileName : `/uploads/${projectDetail.mediaFileName}`}
                               className="w-full max-h-48 bg-black rounded outline-none"
                             />
                           ) : (
                             <audio
                               ref={mediaRef as any}
                               controls
-                              src={`/uploads/${projectDetail.mediaFileName}`}
+                              src={projectDetail.mediaFileName.startsWith("http") ? projectDetail.mediaFileName : `/uploads/${projectDetail.mediaFileName}`}
                               className="w-full outline-none"
                             />
                           )}
