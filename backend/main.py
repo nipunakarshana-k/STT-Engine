@@ -514,18 +514,58 @@ async def translate(req: TranslateRequest, x_gemini_key: Optional[str] = Header(
         except Exception as e:
             print(f"Gemini translation failed: {e}")
             
-    # Mock fallback
-    translations = {
-        "Sinhala": "මෙය STT එන්ජිම පිළිබඳ හැඳින්වීමක් වන අතර කථනය ව්‍යුහගත දැනුමක් බවට පරිවර්තනය කිරීමේ හැකියාව ඇත.",
-        "Tamil": "இது எஸ்டිடி இன்ஜின் பற்றிய அறிமுகமாகும், மேலும் பேச்சை கட்டமைக்கப்பட்ட அறிவாக மாற்றும் திறනைக் கொண்டுள்ளது.",
-        "French": "Ceci est une introduction à STT Engine et à sa capacité à convertir la parole en connaissances structurées.",
-        "Spanish": "Esta es una introducción a STT Engine y su capacidad para convertir el habla en conocimiento estructurado.",
-        "German": "Dies ist eine Einführung in die STT Engine und ihre Fähigkeit, Sprache in strukturiertes Wissen umzuwandeln.",
-        "Japanese": "これはSTT Engineと、音声を構造化された知識に変換する機能の紹介です。",
-        "Chinese": "这是STT引擎及其将语音转化为结构化知识的能力的介绍。"
+    # Heuristic Translation Fallback using free MyMemory API
+    return {"translatedText": translate_text_fallback(req.text, req.target_language)}
+
+def translate_text_fallback(text: str, target_lang_name: str) -> str:
+    lang_mapping = {
+        "Sinhala": "si",
+        "Tamil": "ta",
+        "French": "fr",
+        "Spanish": "es",
+        "German": "de",
+        "Japanese": "ja",
+        "Chinese": "zh"
     }
-    translated = translations.get(req.target_language, f"[Translated to {req.target_language}]: " + req.text[:100] + "...")
-    return {"translatedText": translated}
+    lang_code = lang_mapping.get(target_lang_name)
+    if not lang_code:
+        return f"[Translated to {target_lang_name}]: {text[:100]}..."
+        
+    try:
+        import requests
+        # MyMemory limits request sizes to 500 characters, so we chunk it
+        chunks = [text[i:i+400] for i in range(0, len(text), 400)]
+        translated_chunks = []
+        for chunk in chunks:
+            if not chunk.strip():
+                continue
+            response = requests.get(
+                "https://api.mymemory.translated.net/get",
+                params={"q": chunk, "langpair": f"en|{lang_code}"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                trans_text = response.json().get("responseData", {}).get("translatedText")
+                if trans_text:
+                    translated_chunks.append(trans_text)
+                else:
+                    translated_chunks.append(chunk)
+            else:
+                translated_chunks.append(chunk)
+        return " ".join(translated_chunks)
+    except Exception as e:
+        print(f"Fallback translation API call failed: {e}")
+        # Static last-resort fallbacks
+        translations = {
+            "Sinhala": "මෙය STT එන්ජිම පිළිබඳ හැඳින්වීමක් වන අතර කථනය ව්‍යුහගත දැනුමක් බවට පරිවර්තනය කිරීමේ හැකියාව ඇත.",
+            "Tamil": "இது எஸ்டிடி இன்ஜின் பற்றிய அறிமுகமாகும், மேலும் பேச்சை கட்டமைக்கப்பட்ட அறிவாக மாற்றும் திறனைக் கொண்டுள்ளது.",
+            "French": "Ceci est une introduction à STT Engine et à sa capacité à convertir la parole en connaissances structurées.",
+            "Spanish": "Esta es una introducción a STT Engine y su capacidad para convertir el habla en conocimiento estructurado.",
+            "German": "Dies ist eine Einführung in die STT Engine und ihre Fähigkeit, Sprache in strukturiertes Wissen umzuwandeln.",
+            "Japanese": "これはSTT Engineと、音声を構造化された知識に変換する機能の紹介です。",
+            "Chinese": "这是STT引擎及其将语音转化为结构化知识的能力的介绍。"
+        }
+        return translations.get(target_lang_name, f"[Translated to {target_lang_name}]: {text[:100]}...")
 
 class ChatMessageModel(BaseModel):
     role: str
