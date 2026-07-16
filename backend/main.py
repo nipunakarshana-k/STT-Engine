@@ -603,6 +603,37 @@ def translate_text_fallback(text: str, target_lang_name: str) -> str:
         }
         return translations.get(target_lang_name, f"[Translated to {target_lang_name}]: {text[:100]}...")
 
+def levenshtein_distance(s1: str, s2: str) -> int:
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+        
+    return previous_row[-1]
+
+def is_fuzzy_match(word1: str, word2: str) -> bool:
+    word1 = word1.lower()
+    word2 = word2.lower()
+    if word1 in word2 or word2 in word1:
+        return True
+    # Allow 1 typo for length >= 3, 2 typos for length >= 5
+    dist = levenshtein_distance(word1, word2)
+    if len(word1) >= 5 and dist <= 2:
+        return True
+    if len(word1) >= 3 and dist <= 1:
+        return True
+    return False
+
 class ChatMessageModel(BaseModel):
     role: str
     content: str
@@ -648,18 +679,28 @@ async def chat(req: ChatRequest, x_gemini_key: Optional[str] = Header(None)):
         bullets = "\n".join([f"• {topic}" for topic in kp_heur["topics"]])
         return {"response": f"[AI Assistant]: Here are some key topics mentioned in the video:\n\n{bullets}"}
     else:
-        # Try to find matching sentences in the transcript with cleaned punctuation
+        # Try to find matching sentences in the transcript with fuzzy keyword logic
         matching_sentences = []
         sentences = [s.strip() for s in re.split(r'[.!?\n]', req.transcript) if s.strip()]
         
         # Clean punctuation and lowercase user message query words
         query_words = [re.sub(r'[^\w]', '', w).lower() for w in msg.split()]
         # Remove short/common stop words
-        query_words = [w for w in query_words if len(w) >= 3 and w not in ["what", "how", "why", "who", "when", "where", "show", "tell", "this", "that"]]
+        query_words = [w for w in query_words if len(w) >= 3 and w not in ["what", "how", "why", "who", "when", "where", "this", "that", "they", "them", "then", "there"]]
         
         for sentence in sentences:
-            if any(qw in sentence.lower() for qw in query_words):
+            sentence_words = [re.sub(r'[^\w]', '', w).lower() for w in sentence.split()]
+            matched = False
+            for qw in query_words:
+                for sw in sentence_words:
+                    if is_fuzzy_match(qw, sw):
+                        matched = True
+                        break
+                if matched:
+                    break
+            if matched:
                 matching_sentences.append(sentence)
+                
         if matching_sentences:
             ref_text = "\n".join(matching_sentences[:4])
             return {"response": f"[AI Assistant]: Based on the video transcript, here is what I found:\n\n{ref_text}"}
