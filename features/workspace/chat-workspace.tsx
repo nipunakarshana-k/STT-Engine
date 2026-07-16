@@ -508,9 +508,28 @@ export function ChatWorkspace() {
           const detail = await refreshRes.json();
           setProjectDetail(detail);
         }
+      } else {
+        const errorMsg: ChatMessage = {
+          id: Math.random().toString(),
+          role: "assistant",
+          text: "⚠️ Failed to communicate with chat server. Please verify the backend status.",
+        };
+        setProjectDetail({
+          ...projectDetail,
+          chatMessages: [...updatedMessages, errorMsg],
+        });
       }
     } catch (err) {
       console.error("Chat assistant error:", err);
+      const errorMsg: ChatMessage = {
+        id: Math.random().toString(),
+        role: "assistant",
+        text: "⚠️ Connection failed. The chat service appears to be offline. Please try again in a moment.",
+      };
+      setProjectDetail({
+        ...projectDetail,
+        chatMessages: [...updatedMessages, errorMsg],
+      });
     } finally {
       setSendingChat(false);
     }
@@ -947,8 +966,42 @@ export function ChatWorkspace() {
                               <Loader2 size={16} className="animate-spin text-fern" />
                             </div>
                           ) : (
-                            <div className="text-[11px] leading-relaxed text-ink bg-canvas/15 p-3 rounded-lg border border-sage/30 whitespace-pre-line">
-                              {translationText || "Select language and click translate to view."}
+                            <div className="space-y-2">
+                              {(() => {
+                                if (!translationText) {
+                                  return (
+                                    <div className="text-[11px] leading-relaxed text-ink bg-canvas/15 p-3 rounded-lg border border-sage/30">
+                                      Select language and click translate to view.
+                                    </div>
+                                  );
+                                }
+                                try {
+                                  const parsed = JSON.parse(translationText);
+                                  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].time) {
+                                    return (
+                                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1 border border-sage/30 rounded p-2 bg-canvas/10">
+                                        {parsed.map((seg: any, idx: number) => (
+                                          <div key={idx} className="flex gap-3 text-[11px] leading-relaxed">
+                                            <button
+                                              onClick={() => seekTo(seg.time)}
+                                              className="font-mono font-bold text-fern hover:underline shrink-0 bg-mint/40 px-1.5 py-0.5 rounded h-fit"
+                                            >
+                                              {seg.time}
+                                            </button>
+                                            <span className="text-ink flex-1">{seg.text}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                } catch (e) {}
+                                // Fallback to plain text if parsing fails
+                                return (
+                                  <div className="text-[11px] leading-relaxed text-ink bg-canvas/15 p-3 rounded-lg border border-sage/30 whitespace-pre-line">
+                                    {translationText}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
