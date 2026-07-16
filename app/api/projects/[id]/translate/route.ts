@@ -50,7 +50,13 @@ export async function POST(
       return NextResponse.json(existingTranslation);
     }
 
-    const fullTranscript = project.segments.map((s) => s.text).join(" ");
+    const segmentsPayload = JSON.stringify(
+      project.segments.map((s) => ({
+        time: s.time,
+        text: s.text,
+        startMs: s.startMs,
+      }))
+    );
     const xGeminiKey = request.headers.get("x-gemini-key") || "";
     let translatedText = "";
 
@@ -63,7 +69,7 @@ export async function POST(
           ...(xGeminiKey ? { "x-gemini-key": xGeminiKey } : {})
         },
         body: JSON.stringify({
-          text: fullTranscript,
+          text: segmentsPayload,
           target_language: language,
         }),
       });
@@ -77,19 +83,33 @@ export async function POST(
     } catch (apiError) {
       console.warn("Failed to communicate with FastAPI translate. Using local fallback.");
       
-      // Local fallbacks
-      const translations: Record<string, string> = {
-        English: "This is the english transcript text. It has been retrieved or maintained in English.",
-        Sinhala: "[සිංහල පරිවර්තනය]: මෙය STT එන්ජිම මඟින් ජනනය කරන ලද සිංහල පරිවර්තනයයි. වීඩියෝවේ අන්තර්ගතය සම්පූර්ණයෙන්ම මෙහි සිංහලෙන් දැක්වේ.",
-        Tamil: "[தமிழ் மொழிபெயர்ப்பு]: இது எஸ்டிடி இன்ஜின் மூலம் உருவாக்கப்பட்ட தமிழ் மொழிபெயர்ப்பு. வீடியோவின் உள்ளடக்கம் தமிழ் மொழியில் இங்கே உள்ளது.",
-        French: "[Traduction Française]: Ceci est la traduction française générée par STT Engine. Le contenu de la vidéo est présenté ici en français.",
-        Spanish: "[Traducción al Español]: Esta es la traducción al español generada por STT Engine. El contenido del video se presenta aquí en español.",
-        German: "[Deutsche Übersetzung]: Dies ist die von STT Engine erstellte deutsche Übersetzung. Der Inhalt des Videos wird hier auf Deutsch dargestellt.",
-        Japanese: "[日本語訳]: これはSTT Engineによって生成された日本語訳です。ビデオの内容が日本語で表示されます。",
-        Chinese: "[中文翻译]: 这是由STT Engine生成的中文翻译。视频内容在此以中文呈现。"
-      };
-      
-      translatedText = translations[language] || `[Translated to ${language}]: ` + fullTranscript.slice(0, 150) + "...";
+      // Local fallback with structured segments
+      const localSegments = project.segments.map((s) => {
+        let text = s.text;
+        if (language === "Sinhala") {
+          text = `[සිංහල]: ${s.text}`;
+        } else if (language === "Tamil") {
+          text = `[தமிழ்]: ${s.text}`;
+        } else if (language === "French") {
+          text = `[Français]: ${s.text}`;
+        } else if (language === "Spanish") {
+          text = `[Español]: ${s.text}`;
+        } else if (language === "German") {
+          text = `[Deutsch]: ${s.text}`;
+        } else if (language === "Japanese") {
+          text = `[日本語]: ${s.text}`;
+        } else if (language === "Chinese") {
+          text = `[中文]: ${s.text}`;
+        } else {
+          text = `[${language}]: ${s.text}`;
+        }
+        return {
+          time: s.time,
+          text,
+          startMs: s.startMs,
+        };
+      });
+      translatedText = JSON.stringify(localSegments);
     }
 
     // Save translation

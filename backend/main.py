@@ -499,23 +499,59 @@ class TranslateRequest(BaseModel):
 @app.post("/translate")
 async def translate(req: TranslateRequest, x_gemini_key: Optional[str] = Header(None)):
     active_key = x_gemini_key or GEMINI_API_KEY
+    
+    # Check if text is a JSON array of segments
+    is_json_segments = False
+    try:
+        segments = json.loads(req.text)
+        if isinstance(segments, list) and len(segments) > 0 and "text" in segments[0]:
+            is_json_segments = True
+    except Exception:
+        segments = []
+
     if active_key:
         try:
             genai.configure(api_key=active_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
-            prompt = (
-                f"Translate the following transcript or description text into {req.target_language}. "
-                "Maintain the flow and tone of the original spoken or written content. "
-                "Output only the translated text.\n\n"
-                f"Text:\n{req.text}"
-            )
-            response = model.generate_content(prompt)
-            return {"translatedText": response.text.strip()}
+            
+            if is_json_segments:
+                prompt = (
+                    f"Translate the 'text' field of each segment in the following JSON array into {req.target_language}. "
+                    "Keep all other keys (like 'time' and 'startMs') exactly the same. "
+                    "Maintain the tone of the spoken content. "
+                    "Output ONLY the translated JSON array. Do not wrap in markdown or add extra text.\n\n"
+                    f"JSON:\n{req.text}"
+                )
+                response = model.generate_content(prompt)
+                cleaned = clean_llm_json(response.text)
+                # Verify valid JSON
+                json.loads(cleaned)
+                return {"translatedText": cleaned}
+            else:
+                prompt = (
+                    f"Translate the following transcript or description text into {req.target_language}. "
+                    "Maintain the flow and tone of the original spoken or written content. "
+                    "Output only the translated text.\n\n"
+                    f"Text:\n{req.text}"
+                )
+                response = model.generate_content(prompt)
+                return {"translatedText": response.text.strip()}
         except Exception as e:
             print(f"Gemini translation failed: {e}")
             
     # Heuristic Translation Fallback using free MyMemory API
-    return {"translatedText": translate_text_fallback(req.text, req.target_language)}
+    if is_json_segments:
+        translated_segments = []
+        for seg in segments:
+            translated_text = translate_text_fallback(seg["text"], req.target_language)
+            translated_segments.append({
+                "time": seg["time"],
+                "text": translated_text,
+                "startMs": seg["startMs"]
+            })
+        return {"translatedText": json.dumps(translated_segments)}
+    else:
+        return {"translatedText": translate_text_fallback(req.text, req.target_language)}
 
 def translate_text_fallback(text: str, target_lang_name: str) -> str:
     lang_mapping = {
@@ -612,15 +648,20 @@ async def chat(req: ChatRequest, x_gemini_key: Optional[str] = Header(None)):
         bullets = "\n".join([f"• {topic}" for topic in kp_heur["topics"]])
         return {"response": f"[AI Assistant]: Here are some key topics mentioned in the video:\n\n{bullets}"}
     else:
-        # Try to find matching sentences in the transcript
+        # Try to find matching sentences in the transcript with cleaned punctuation
         matching_sentences = []
-        sentences = [s.strip() for s in re.split(r'[.!?]', req.transcript) if s.strip()]
+        sentences = [s.strip() for s in re.split(r'[.!?\n]', req.transcript) if s.strip()]
+        
+        # Clean punctuation and lowercase user message query words
+        query_words = [re.sub(r'[^\w]', '', w).lower() for w in msg.split()]
+        # Remove short/common stop words
+        query_words = [w for w in query_words if len(w) >= 3 and w not in ["what", "how", "why", "who", "when", "where", "show", "tell", "this", "that"]]
+        
         for sentence in sentences:
-            query_words = [w for w in msg.split() if len(w) > 3]
             if any(qw in sentence.lower() for qw in query_words):
                 matching_sentences.append(sentence)
         if matching_sentences:
-            ref_text = ". ".join(matching_sentences[:3]) + "."
-            return {"response": f"[AI Assistant]: Based on the video transcript, here is what I found:\n\n\"{ref_text}\""}
+            ref_text = "\n".join(matching_sentences[:4])
+            return {"response": f"[AI Assistant]: Based on the video transcript, here is what I found:\n\n{ref_text}"}
         
     return {"response": f"Based on the transcript, you asked: '{req.new_message}'. (Note: Gemini API key is not configured, but I can still assist you with general queries!)"}
