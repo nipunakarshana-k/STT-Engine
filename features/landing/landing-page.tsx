@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState, useRef, useEffect } from "react";
 import {
   ArrowRight,
   Bot,
@@ -29,7 +32,7 @@ const features = [
   {
     icon: Bot,
     title: "AI chat",
-    description: "Ask natural questions about the content and get answers based on the transcript.",
+    description: "Answer natural questions about the content and get answers based on the transcript.",
   },
   {
     icon: Download,
@@ -46,6 +49,25 @@ const steps = [
 ];
 
 export function LandingPage() {
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [heroMenuOpen, setHeroMenuOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+  const heroMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menus on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setHeaderMenuOpen(false);
+      }
+      if (heroMenuRef.current && !heroMenuRef.current.contains(event.target as Node)) {
+        setHeroMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
     <main className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-sage/70 bg-canvas/85 backdrop-blur">
@@ -72,13 +94,38 @@ export function LandingPage() {
             </a>
           </nav>
 
-          <Link
-            href="/workspace"
-            className="inline-flex items-center gap-2 rounded-md bg-fern px-4 py-2.5 text-sm font-semibold text-paper shadow-soft transition hover:bg-[#285f3c]"
-          >
-            Get Started
-            <ArrowRight size={17} />
-          </Link>
+          <div className="relative" ref={headerMenuRef}>
+            <button
+              onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
+              className="inline-flex items-center gap-2 rounded-md bg-fern px-4 py-2.5 text-sm font-semibold text-paper shadow-soft transition hover:bg-[#285f3c]"
+            >
+              Get Started
+              <ArrowRight size={17} />
+            </button>
+
+            {headerMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 rounded-lg border border-sage bg-paper p-1.5 shadow-soft z-30 animate-fade-in">
+                <Link
+                  href="/login"
+                  className="block rounded-md px-4 py-2 text-sm text-ink hover:bg-mint transition font-medium"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/register"
+                  className="block rounded-md px-4 py-2 text-sm text-ink hover:bg-mint transition font-medium border-t border-sage/30 mt-1"
+                >
+                  Sign Up (Create Account)
+                </Link>
+                <Link
+                  href="/workspace"
+                  className="block rounded-md px-4 py-2 text-sm text-fern hover:bg-mint transition font-bold border-t border-sage/30 mt-1"
+                >
+                  Workspace
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -99,14 +146,39 @@ export function LandingPage() {
             ask questions, and export the results.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/workspace"
-              className="inline-flex items-center gap-2 rounded-md bg-fern px-5 py-3 text-sm font-semibold text-paper shadow-soft transition hover:bg-[#285f3c]"
-            >
-              Get Started
-              <ArrowRight size={18} />
-            </Link>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="relative" ref={heroMenuRef}>
+              <button
+                onClick={() => setHeroMenuOpen(!heroMenuOpen)}
+                className="inline-flex items-center gap-2 rounded-md bg-fern px-5 py-3 text-sm font-semibold text-paper shadow-soft transition hover:bg-[#285f3c]"
+              >
+                Get Started
+                <ArrowRight size={18} />
+              </button>
+
+              {heroMenuOpen && (
+                <div className="absolute left-0 mt-2 w-48 rounded-lg border border-sage bg-paper p-1.5 shadow-soft z-30 animate-fade-in">
+                  <Link
+                    href="/login"
+                    className="block rounded-md px-4 py-2 text-sm text-ink hover:bg-mint transition font-medium"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="block rounded-md px-4 py-2 text-sm text-ink hover:bg-mint transition font-medium border-t border-sage/30 mt-1"
+                  >
+                    Sign Up (Create Account)
+                  </Link>
+                  <Link
+                    href="/workspace"
+                    className="block rounded-md px-4 py-2 text-sm text-fern hover:bg-mint transition font-bold border-t border-sage/30 mt-1"
+                  >
+                    Workspace
+                  </Link>
+                </div>
+              )}
+            </div>
             <a
               href="#how-it-works"
               className="inline-flex items-center gap-2 rounded-md border border-sage bg-paper px-5 py-3 text-sm font-semibold text-ink transition hover:bg-mint"
