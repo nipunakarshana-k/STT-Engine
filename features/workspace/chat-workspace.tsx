@@ -621,22 +621,6 @@ export function ChatWorkspace() {
           </div>
         )}
 
-        {/* Gemini API Key input */}
-        <div className="px-4 py-3 border-b border-sage/40 bg-canvas/10">
-          <label className="block text-[10px] font-bold text-moss uppercase mb-1">
-            Gemini API Key (Free Tier)
-          </label>
-          <input
-            type="password"
-            placeholder="Paste your AI Studio Key..."
-            value={geminiKey}
-            onChange={(e) => handleSaveKey(e.target.value)}
-            className="w-full rounded border border-sage bg-paper px-2 py-1.5 text-[10px] text-ink outline-none placeholder-muted focus:border-fern"
-          />
-          <p className="text-[9px] text-muted mt-1 leading-normal">
-            🔑 Stored locally in your browser. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-fern underline font-bold">Google AI Studio</a>.
-          </p>
-        </div>
 
         <div className="p-3">
           <button
